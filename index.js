@@ -55,7 +55,7 @@ async function handle(sock,msg){
   if (!jid || jid.endsWith('@g.us')) return;
   const text=(msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
   if (!text) {
-    return sock.sendMessage(jid,{text:`👋 Pesan Anda sudah diterima.\n\nBot dapat merespons pesan layanan. Silakan ketik *MENU* untuk menampilkan pilihan layanan.`}).then(() => sendOnlyMenu(sock,jid));
+    return sock.sendMessage(jid,{text:`👋 Pesan Anda telah kami terima.\n\nSilakan ketik *MENU* untuk melihat layanan yang tersedia.`}).then(() => sendOnlyMenu(sock,jid));
   }
   const low=text.toLowerCase();
 
@@ -75,8 +75,25 @@ async function handle(sock,msg){
     if(text==='4'){ sessions.set(jid,{mode:'cek'}); return sock.sendMessage(jid,{text:`🔎 *CEK STATUS PENGADUAN*\n\nMasukkan Nomor Pengaduan, contoh:\n*ADU-2026-0001*\n\nKetik *0* untuk kembali ke MENU.`}); }
     if(text==='5'){ return sock.sendMessage(jid,{text:`ℹ️ *INFORMASI PELAYANAN*\n\nLayanan ini digunakan untuk menerima pengaduan, aspirasi, dan informasi masyarakat. Setiap laporan akan diterima dan ditindaklanjuti sesuai ketentuan yang berlaku.\n\nKetik *0* untuk kembali ke MENU.`}); }
     if(text==='6'){ sessions.set(jid,{mode:'petugas'}); return sock.sendMessage(jid,{text:`👮 *BANTUAN / HUBUNGI PETUGAS*\n\nSilakan tuliskan pertanyaan atau kebutuhan Anda. Pesan akan diterima oleh sistem pelayanan.\n\nKetik *0* untuk kembali ke MENU.`}); }
-    // Semua chat yang bukan pilihan 1-6 tetap direspons tanpa mengubah MENU.
-    return sock.sendMessage(jid,{text:`👋 Terima kasih, pesan Anda sudah kami terima.\n\nUntuk mendapatkan layanan secara otomatis, silakan pilih menu yang tersedia di bawah ini.\n\nKetik *MENU* kapan saja untuk menampilkan kembali menu layanan.`}).then(() => sendOnlyMenu(sock,jid));
+    // Chat bebas: tetap responsif tanpa mengubah MENU 1-6.
+    if (/^(halo|hai|hi|hello|assalamualaikum|permisi)\\b/i.test(text)) {
+      return sock.sendMessage(jid,{text:`👋 *Halo, selamat datang.*\\n\\nTerima kasih telah menghubungi Portal Pengaduan dan Aspirasi Masyarakat YONIF TP 953/HARIMAU RAWA.\\n\\nSilakan sampaikan kebutuhan Anda atau pilih layanan pada menu.`}).then(() => sendOnlyMenu(sock,jid));
+    }
+
+    if (/^(selamat pagi|selamat siang|selamat sore|selamat malam)\\b/i.test(text)) {
+      return sock.sendMessage(jid,{text:`🙏 *Salam dan selamat datang.*\\n\\nSilakan sampaikan kebutuhan Anda. Bot siap membantu mengarahkan Anda ke layanan yang tersedia.`}).then(() => sendOnlyMenu(sock,jid));
+    }
+
+    if (/terima kasih|makasih|thanks|thank you/i.test(text)) {
+      return sock.sendMessage(jid,{text:`🙏 Sama-sama. Terima kasih telah menghubungi layanan kami.\\n\\nJika membutuhkan layanan lain, silakan pilih menu yang tersedia.`}).then(() => sendOnlyMenu(sock,jid));
+    }
+
+    if (/^(apa saja|layanan|bantuan|bisa bantu|mau tanya|ingin bertanya|pertanyaan)\\b/i.test(text) ||
+        /layanan.*(apa|tersedia)|bisa.*(apa|bantu)/i.test(text)) {
+      return sock.sendMessage(jid,{text:`ℹ️ *Tentu, kami siap membantu.*\\n\\nAnda dapat menggunakan layanan pengaduan, aspirasi, informasi, cek pengaduan, informasi pelayanan, atau menghubungi petugas.\\n\\nSilakan pilih layanan dari menu di bawah.`}).then(() => sendOnlyMenu(sock,jid));
+    }
+
+    return sock.sendMessage(jid,{text:`👋 *Pesan Anda telah kami terima.*\\n\\nBot tetap dapat merespons pesan apa pun. Untuk mendapatkan bantuan secara otomatis, silakan pilih layanan pada menu yang tersedia.\\n\\nKetik *MENU* kapan saja untuk menampilkan menu kembali.`}).then(() => sendOnlyMenu(sock,jid));
   }
 
   if(state.mode==='complaint'){
@@ -103,7 +120,7 @@ async function handle(sock,msg){
   }
 
   sessions.delete(jid);
-  return sock.sendMessage(jid,{text:`✅ Pesan Anda telah diterima.\n\nPesan apa pun yang Anda kirim tetap akan direspons oleh bot.\n\nKetik *MENU* atau *0* untuk kembali ke MENU.`}).then(() => sendOnlyMenu(sock,jid));
+  return sock.sendMessage(jid,{text:`✅ Pesan Anda telah diterima.\n\nKetik *0* untuk kembali ke MENU.`});
 }
 
 async function start(){
