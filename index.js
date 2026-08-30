@@ -12,7 +12,7 @@ const DATA = './data/pengaduan.json';
 if (!fs.existsSync('./data')) fs.mkdirSync('./data', {recursive:true});
 if (!fs.existsSync(DATA)) fs.writeFileSync(DATA, '[]');
 
-const OPENING = `👋 Pesan Anda telah kami terima.\n\nSilakan ketik *MENU* untuk melihat layanan yang tersedia.`;
+const OPENING = `👋 Pesan Anda telah kami terima.Selanjutnya, laporan akan kami verifikasi dan tindak lanjuti sesuai ketentuan yang berlaku.`;
 
 const MENU = `╭━━━━━━━━━━━━━━━━━━━━╮
         🇮🇩 *MENU LAYANAN* 🇮🇩
