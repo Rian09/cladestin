@@ -12,7 +12,14 @@ const DATA = './data/pengaduan.json';
 if (!fs.existsSync('./data')) fs.mkdirSync('./data', {recursive:true});
 if (!fs.existsSync(DATA)) fs.writeFileSync(DATA, '[]');
 
-const OPENING = `👋 Pesan Anda telah kami terima.Selanjutnya, laporan akan kami verifikasi dan tindak lanjuti sesuai ketentuan yang berlaku.`;
+const OPENING = `*🇮🇩 SELAMAT DATANG DI PORTAL PENGADUAN DAN ASPIRASI MASYARAKAT
+YONIF TP 953/HARIMAU RAWA 🇮🇩*
+
+Portal ini merupakan sarana komunikasi masyarakat untuk menyampaikan laporan pengaduan informasi serta aspirasi. Kami akan menerima dan menindaklanjutinya sesuai ketentuan yang berlaku
+
+*Apakah ada yang bisa kami bantu?*
+
+Silakan pilih layanan yang Anda perlukan:`;
 
 const MENU = `╭━━━━━━━━━━━━━━━━━━━━╮
         🇮🇩 *MENU LAYANAN* 🇮🇩
@@ -52,7 +59,14 @@ async function handle(sock,msg){
   }
   const low=text.toLowerCase();
 
-  if(['menu','halo','hai','hi','start','mulai'].includes(low) || text==='0'){
+  // Ketik MENU -> tampilkan menu layanan saja.
+  // Ketik 0 -> kembali ke pembukaan + menu.
+  if(low === 'menu'){
+    sessions.delete(jid);
+    return sendOnlyMenu(sock,jid);
+  }
+
+  if(['halo','hai','hi','start','mulai'].includes(low) || text==='0'){
     sessions.delete(jid); return sendMenu(sock,jid);
   }
 
@@ -86,14 +100,7 @@ async function handle(sock,msg){
       return sock.sendMessage(jid,{text:`ℹ️ *Tentu, kami siap membantu.*\\n\\nAnda dapat menggunakan layanan pengaduan, aspirasi, informasi, cek pengaduan, informasi pelayanan, atau menghubungi petugas.\\n\\nSilakan pilih layanan dari menu di bawah.`}).then(() => sendOnlyMenu(sock,jid));
     }
 
-    return sock.sendMessage(jid,{text:`*🇮🇩 SELAMAT DATANG DI PORTAL PENGADUAN DAN ASPIRASI MASYARAKAT
-YONIF TP 953/HARIMAU RAWA 🇮🇩*
-
-Portal ini merupakan sarana komunikasi masyarakat untuk menyampaikan laporan pengaduan informasi serta aspirasi. Kami akan menerima dan menindaklanjutinya sesuai ketentuan yang berlaku
-
-Apakah ada yang bisa kami bantu?
-
-Silakan pilih layanan yang Anda perlukan:`}).then(() => sendOnlyMenu(sock,jid));
+    return sock.sendMessage(jid,{text:`👋 *Pesan Anda telah kami terima.*\\n\\nBot tetap dapat merespons pesan apa pun. Untuk mendapatkan bantuan secara otomatis, silakan pilih layanan pada menu yang tersedia.\\n\\nKetik *MENU* kapan saja untuk menampilkan menu kembali.`}).then(() => sendOnlyMenu(sock,jid));
   }
 
   if(state.mode==='complaint'){
