@@ -1,150 +1,59 @@
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} = require('@whiskeysockets/baileys');
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const P = require('pino');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
+const path = require('path');
 
-const DATA = './data/pengaduan.json';
-if (!fs.existsSync('./data')) fs.mkdirSync('./data', {recursive:true});
+const DATA = path.join(__dirname, 'data', 'pengaduan.json');
+if (!fs.existsSync(path.dirname(DATA))) fs.mkdirSync(path.dirname(DATA), { recursive: true });
 if (!fs.existsSync(DATA)) fs.writeFileSync(DATA, '[]');
-
-const OPENING = `*🇮🇩 SELAMAT DATANG DI PORTAL PENGADUAN DAN ASPIRASI MASYARAKAT
-YONIF TP 953/HARIMAU RAWA 🇮🇩*
-
-Portal ini merupakan sarana komunikasi masyarakat untuk menyampaikan laporan pengaduan informasi serta aspirasi. Kami akan menerima dan menindaklanjutinya sesuai ketentuan yang berlaku
-
-*Apakah ada yang bisa kami bantu?*
-
-Silakan pilih layanan yang Anda perlukan:`;
-
-const MENU = `╭━━━━━━━━━━━━━━━━━━━━╮
-        🇮🇩 *MENU LAYANAN* 🇮🇩
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-📋 *1. PENGADUAN*
-💬 *2. ASPIRASI*
-📢 *3. INFORMASI*
-🔎 *4. CEK PENGADUAN*
-ℹ️ *5. INFORMASI PELAYANAN*
-👮 *6. HUBUNGI PETUGAS*
-
-_Ketik angka 1–6 sesuai layanan yang Anda perlukan._
-
-_Ketik *0* untuk kembali ke MENU._`;
-
+const db = () => JSON.parse(fs.readFileSync(DATA, 'utf8'));
+const save = x => fs.writeFileSync(DATA, JSON.stringify(x, null, 2));
 const sessions = new Map();
 
-function loadData(){ return JSON.parse(fs.readFileSync(DATA,'utf8')); }
-function saveData(d){ fs.writeFileSync(DATA, JSON.stringify(d,null,2)); }
-function nextId(){
-  const d=loadData();
-  const n=d.length+1;
-  return `ADU-${new Date().getFullYear()}-${String(n).padStart(4,'0')}`;
-}
+const opening = `*🇮🇩 SELAMAT DATANG DI PORTAL PENGADUAN DAN ASPIRASI MASYARAKAT\nYONIF TP 953/HARIMAU RAWA 🇮🇩*\n\nPortal ini merupakan sarana komunikasi masyarakat untuk menyampaikan laporan, pengaduan, informasi, serta aspirasi. Kami akan menerima dan menindaklanjutinya sesuai ketentuan yang berlaku\n\n*Apakah ada yang bisa kami bantu?*\n\nSilakan pilih layanan yang Anda perlukan: *MENU*`;
+const menu = `🇮🇩 *PORTAL PELAYANAN MASYARAKAT* 🇮🇩\n*YONIF TP 953/HARIMAU RAWA*\n\n━━━━━━━━━━━━━━━━━━━━━━\n        *LAYANAN DIGITAL*\n━━━━━━━━━━━━━━━━━━━━━━\n\n*01 | PENGADUAN*\nMenyampaikan laporan atau pengaduan.\n\n*02 | SINERGI & ASPIRASI*\nSaran, masukan, aspirasi, dan sinergi masyarakat.\n\n*03 | INFORMASI*\nInformasi mengenai layanan yang tersedia.\n\n*04 | CEK STATUS*\nMemeriksa perkembangan pengaduan.\n\n*05 | HUBUNGI PETUGAS*\nBantuan atau informasi lebih lanjut.\n\n*06 | TENTANG PORTAL*\nInformasi mengenai portal.\n\n*07 | KEADAAN DARURAT*\nInformasi situasi darurat yang membutuhkan perhatian segera.\n\n*08 | PENGAWASAN ANGGOTA*\nMenyampaikan informasi atau laporan terkait anggota sesuai ketentuan.\n\n━━━━━━━━━━━━━━━━━━━━━━\n*Ketik 01–08 sesuai layanan.*`;
 
-async function sendMenu(sock,jid){ await sock.sendMessage(jid,{text:OPENING}); await sock.sendMessage(jid,{text:MENU}); }
-async function sendOnlyMenu(sock,jid){ await sock.sendMessage(jid,{text:MENU}); }
-
-async function handle(sock,msg){
-  if (!msg.message || msg.key.fromMe) return;
-  const jid=msg.key.remoteJid;
-  if (!jid || jid.endsWith('@g.us')) return;
-  const text=(msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
-  if (!text) {
-    return sock.sendMessage(jid,{text:`👋 Pesan Anda telah kami terima.\n\nSilakan ketik *MENU* untuk melihat layanan yang tersedia.`}).then(() => sendOnlyMenu(sock,jid));
-  }
-  const low=text.toLowerCase();
-
-  // Ketik MENU -> tampilkan menu layanan saja.
-  // Ketik 0 -> kembali ke pembukaan + menu.
-  if(low === 'menu'){
-    sessions.delete(jid);
-    return sendOnlyMenu(sock,jid);
-  }
-
-  if(['halo','hai','hi','start','mulai'].includes(low) || text==='0'){
-    sessions.delete(jid); return sendMenu(sock,jid);
-  }
-
-  const state=sessions.get(jid);
-
-  if(!state){
-    if(text==='1'){
-      sessions.set(jid,{mode:'complaint',step:0});
-      return sock.sendMessage(jid,{text:`📝 *LAYANAN PENGADUAN*\n\nSilakan kirim pengaduan dengan format:\n\nNama:\nNo. WhatsApp:\nLokasi:\nWaktu Kejadian:\nIsi Pengaduan:\nBukti Pendukung: (jika ada)\n\nKirim dalam satu pesan.\n\nKetik *0* untuk kembali ke MENU.`});
-    }
-    if(text==='2'){ sessions.set(jid,{mode:'aspirasi'}); return sock.sendMessage(jid,{text:`💬 *LAYANAN ASPIRASI*\n\nSilakan tuliskan saran, masukan, atau aspirasi Anda.\n\nKetik *0* untuk kembali ke MENU.`}); }
-    if(text==='3'){ sessions.set(jid,{mode:'informasi'}); return sock.sendMessage(jid,{text:`📢 *LAYANAN INFORMASI*\n\nSilakan sampaikan informasi yang ingin dilaporkan. Sertakan waktu, lokasi, kronologi, serta foto/video jika tersedia.\n\nKetik *0* untuk kembali ke MENU.`}); }
-    if(text==='4'){ sessions.set(jid,{mode:'cek'}); return sock.sendMessage(jid,{text:`🔎 *CEK STATUS PENGADUAN*\n\nMasukkan Nomor Pengaduan, contoh:\n*ADU-2026-0001*\n\nKetik *0* untuk kembali ke MENU.`}); }
-    if(text==='5'){ return sock.sendMessage(jid,{text:`ℹ️ *INFORMASI PELAYANAN*\n\nLayanan ini digunakan untuk menerima pengaduan, aspirasi, dan informasi masyarakat. Setiap laporan akan diterima dan ditindaklanjuti sesuai ketentuan yang berlaku.\n\nKetik *0* untuk kembali ke MENU.`}); }
-    if(text==='6'){ sessions.set(jid,{mode:'petugas'}); return sock.sendMessage(jid,{text:`👮 *BANTUAN / HUBUNGI PETUGAS*\n\nSilakan tuliskan pertanyaan atau kebutuhan Anda. Pesan akan diterima oleh sistem pelayanan.\n\nKetik *0* untuk kembali ke MENU.`}); }
-    // Chat bebas: tetap responsif tanpa mengubah MENU 1-6.
-    if (/^(halo|hai|hi|hello|assalamualaikum|permisi)\\b/i.test(text)) {
-      return sock.sendMessage(jid,{text:`👋 *Halo, selamat datang.*\\n\\nTerima kasih telah menghubungi Portal Pengaduan dan Aspirasi Masyarakat YONIF TP 953/HARIMAU RAWA.\\n\\nSilakan sampaikan kebutuhan Anda atau pilih layanan pada menu.`}).then(() => sendOnlyMenu(sock,jid));
-    }
-
-    if (/^(selamat pagi|selamat siang|selamat sore|selamat malam)\\b/i.test(text)) {
-      return sock.sendMessage(jid,{text:`🙏 *Salam dan selamat datang.*\\n\\nSilakan sampaikan kebutuhan Anda. Bot siap membantu mengarahkan Anda ke layanan yang tersedia.`}).then(() => sendOnlyMenu(sock,jid));
-    }
-
-    if (/terima kasih|makasih|thanks|thank you/i.test(text)) {
-      return sock.sendMessage(jid,{text:`🙏 Sama-sama. Terima kasih telah menghubungi layanan kami.\\n\\nJika membutuhkan layanan lain, silakan pilih menu yang tersedia.`}).then(() => sendOnlyMenu(sock,jid));
-    }
-
-    if (/^(apa saja|layanan|bantuan|bisa bantu|mau tanya|ingin bertanya|pertanyaan)\\b/i.test(text) ||
-        /layanan.*(apa|tersedia)|bisa.*(apa|bantu)/i.test(text)) {
-      return sock.sendMessage(jid,{text:`ℹ️ *Tentu, kami siap membantu.*\\n\\nAnda dapat menggunakan layanan pengaduan, aspirasi, informasi, cek pengaduan, informasi pelayanan, atau menghubungi petugas.\\n\\nSilakan pilih layanan dari menu di bawah.`}).then(() => sendOnlyMenu(sock,jid));
-    }
-
-    return sock.sendMessage(jid,{text:`👋 *Pesan Anda telah kami terima.*\\n\\nBot tetap dapat merespons pesan apa pun. Untuk mendapatkan bantuan secara otomatis, silakan pilih layanan pada menu yang tersedia.\\n\\nKetik *MENU* kapan saja untuk menampilkan menu kembali.`}).then(() => sendOnlyMenu(sock,jid));
-  }
-
-  if(state.mode==='complaint'){
-    const id=nextId();
-    const d=loadData();
-    d.push({id,phone:jid.replace('@s.whatsapp.net',''),text,status:'Diterima',createdAt:new Date().toISOString()});
-    saveData(d); sessions.delete(jid);
-    return sock.sendMessage(jid,{text:`✅ *PENGADUAN BERHASIL DITERIMA*\n\nNomor Pengaduan:\n*${id}*\n\nPengaduan Anda telah diterima dan akan diproses sesuai ketentuan yang berlaku.\n\n📌 Simpan nomor pengaduan untuk pengecekan status.\n\nKetik *0* untuk kembali ke MENU.`});
-  }
-
-  if(state.mode==='aspirasi'){
-    sessions.delete(jid); return sock.sendMessage(jid,{text:`✅ *ASPIRASI TELAH DITERIMA*\n\nTerima kasih atas aspirasi, saran, dan masukan yang Anda sampaikan.\n\nKetik *0* untuk kembali ke MENU.`});
-  }
-
-  if(state.mode==='informasi'){
-    sessions.delete(jid); return sock.sendMessage(jid,{text:`✅ *INFORMASI TELAH DITERIMA*\n\nTerima kasih. Informasi Anda telah diterima oleh sistem pelayanan.\n\nKetik *0* untuk kembali ke MENU.`});
-  }
-
-  if(state.mode==='cek'){
-    const d=loadData(); const found=d.find(x=>x.id.toLowerCase()===low);
-    sessions.delete(jid);
-    if(!found) return sock.sendMessage(jid,{text:`❌ Nomor pengaduan *${text}* tidak ditemukan.\n\nPastikan nomor yang dimasukkan benar.\n\nKetik *0* untuk kembali ke MENU.`});
-    return sock.sendMessage(jid,{text:`🔎 *STATUS PENGADUAN*\n\nNomor: *${found.id}*\nStatus: *${found.status}*\nTanggal: ${new Date(found.createdAt).toLocaleString('id-ID')}\n\nKetik *0* untuk kembali ke MENU.`});
-  }
-
-  sessions.delete(jid);
-  return sock.sendMessage(jid,{text:`✅ Pesan Anda telah diterima.\n\nKetik *0* untuk kembali ke MENU.`});
-}
-
+function ticket(){ const n=db().length+1; return `PGA-${new Date().getFullYear()}-${String(n).padStart(4,'0')}`; }
 async function start(){
-  const {state,saveCreds}=await useMultiFileAuthState('./auth_info');
-  const {version}=await fetchLatestBaileysVersion();
-  const sock=makeWASocket({auth:state,version,logger:P({level:'silent'}),printQRInTerminal:false});
-  sock.ev.on('creds.update',saveCreds);
-  sock.ev.on('connection.update',({connection,lastDisconnect,qr})=>{
-    if(qr){ console.log('\nSCAN QR INI DENGAN WHATSAPP > PERANGKAT TERTAUT:\n'); qrcode.generate(qr,{small:true}); }
-    if(connection==='open') console.log('\nBOT WHATSAPP AKTIF ✅');
-    if(connection==='close'){
-      const code=lastDisconnect?.error?.output?.statusCode;
-      if(code!==DisconnectReason.loggedOut) start(); else console.log('Sesi logout. Hapus folder auth_info lalu jalankan ulang.');
-    }
-  });
-  sock.ev.on('messages.upsert',async({messages})=>{
-    for(const msg of messages){ try{await handle(sock,msg);}catch(e){console.error(e);} }
-  });
+ const {state,saveCreds}=await useMultiFileAuthState(path.join(__dirname,'auth_info'));
+ const sock=makeWASocket({auth:state,logger:P({level:'silent'}),printQRInTerminal:false});
+ sock.ev.on('creds.update',saveCreds);
+ sock.ev.on('connection.update',({connection,lastDisconnect,qr})=>{
+  if(qr) qrcode.generate(qr,{small:true});
+  if(connection==='open') console.log('BOT TERHUBUNG');
+  if(connection==='close' && lastDisconnect?.error?.output?.statusCode!==DisconnectReason.loggedOut) start();
+ });
+ sock.ev.on('messages.upsert',async({messages})=>{
+  const m=messages[0]; if(!m?.message||m.key.fromMe||m.key.remoteJid.endsWith('@g.us')) return;
+  const jid=m.key.remoteJid;
+  const text=(m.message.conversation||m.message.extendedTextMessage?.text||'').trim();
+  const cmd=text.toLowerCase();
+  if(cmd==='menu') { sessions.delete(jid); return sock.sendMessage(jid,{text:menu}); }
+  if(!sessions.has(jid)) { await sock.sendMessage(jid,{text:opening}); return; }
+  const s=sessions.get(jid);
+  if(s.type==='pengawasan') await handlePengawasan(sock,jid,text,s);
+  else if(s.type==='status') {
+    const found=db().find(x=>x.ticket.toLowerCase()===cmd);
+    await sock.sendMessage(jid,{text:found?`🔎 *STATUS PENGADUAN*\n\n🎫 Tiket: *${found.ticket}*\n📌 Status: *${found.status}*\n🕐 Diterima: ${found.createdAt}`:`❌ Nomor tiket *${text}* tidak ditemukan.`}); sessions.delete(jid);
+  }
+  else if(['01','1'].includes(cmd)) await sock.sendMessage(jid,{text:'📝 *LAYANAN PENGADUAN*\n\nSilakan ketik uraian pengaduan Anda.\n\nKetik *MENU* untuk kembali.'});
+  else if(['02','2'].includes(cmd)) await sock.sendMessage(jid,{text:'🤝 *SINERGI & ASPIRASI*\n\nSilakan sampaikan saran, masukan, aspirasi, atau usulan sinergi Anda.'});
+  else if(['03','3'].includes(cmd)) await sock.sendMessage(jid,{text:'ℹ️ *INFORMASI LAYANAN*\n\nSilakan ketik pertanyaan atau informasi yang Anda perlukan.'});
+  else if(['04','4'].includes(cmd)) {sessions.set(jid,{type:'status'}); await sock.sendMessage(jid,{text:'🔎 *CEK STATUS*\n\nSilakan masukkan nomor tiket pengaduan Anda.'});}
+  else if(['05','5'].includes(cmd)) await sock.sendMessage(jid,{text:'👮 *HUBUNGI PETUGAS*\n\nSilakan tuliskan keperluan atau pesan Anda.'});
+  else if(['06','6'].includes(cmd)) await sock.sendMessage(jid,{text:'🇮🇩 *TENTANG PORTAL*\n\nPortal ini merupakan sarana komunikasi masyarakat untuk menyampaikan laporan, pengaduan, informasi, serta aspirasi untuk ditindaklanjuti sesuai ketentuan yang berlaku.'});
+  else if(['07','7'].includes(cmd)) await sock.sendMessage(jid,{text:'🚨 *KEADAAN DARURAT*\n\n⚠️ WhatsApp ini *bukan pengganti layanan darurat resmi*. Jika keselamatan Anda atau orang lain terancam dan membutuhkan pertolongan segera, hubungi layanan darurat/instansi terkait di wilayah Anda secara langsung.\n\nJika memungkinkan, sampaikan lokasi, waktu, jenis keadaan darurat, kondisi, dan nomor yang dapat dihubungi.'});
+  else if(['08','8'].includes(cmd)) { sessions.set(jid,{type:'pengawasan',step:1,data:{}}); await sock.sendMessage(jid,{text:'🇮🇩 *LAYANAN PENGAWASAN ANGGOTA*\n\n🔐 Sampaikan informasi secara jelas, objektif, dan bertanggung jawab.\n\n*1/6 — NAMA PELAPOR*\nSilakan ketik nama pelapor.'}); }
+ });
 }
-start();
+async function handlePengawasan(sock,jid,text,s){
+ if(s.step===1){s.data.namaPelapor=text;s.step=2;return sock.sendMessage(jid,{text:'*2/6 — WAKTU & LOKASI KEJADIAN*\nSilakan tuliskan waktu dan lokasi kejadian.'});}
+ if(s.step===2){s.data.waktuLokasi=text;s.step=3;return sock.sendMessage(jid,{text:'*3/6 — IDENTITAS ANGGOTA*\nNama atau identitas anggota, apabila diketahui. Jika tidak diketahui, ketik *TIDAK DIKETAHUI*.'});}
+ if(s.step===3){s.data.identitasAnggota=text;s.step=4;return sock.sendMessage(jid,{text:'*4/6 — URAIAN KEJADIAN*\nSilakan jelaskan kejadian secara lengkap dan kronologis.'});}
+ if(s.step===4){s.data.uraian=text;s.step=5;return sock.sendMessage(jid,{text:'*5/6 — BUKTI PENDUKUNG*\nJika ada, kirim foto/dokumen yang relevan. Jika tidak ada, ketik *TIDAK ADA*.'});}
+ if(s.step===5){s.data.bukti=text;s.step=6;return sock.sendMessage(jid,{text:'*6/6 — NOMOR YANG DAPAT DIHUBUNGI*\nSilakan masukkan nomor yang dapat dihubungi petugas.'});}
+ if(s.step===6){s.data.nomor=text; s.ticket=ticket(); s.status='Diterima'; s.createdAt=new Date().toLocaleString('id-ID'); const arr=db(); arr.push(s); save(arr); sessions.delete(jid); return sock.sendMessage(jid,{text:`✅ *LAPORAN BERHASIL DITERIMA*\n\nTerima kasih. Informasi Anda telah berhasil diterima dan tercatat dalam sistem.\n\n🎫 *Nomor Tiket:* *${s.ticket}*\n\nSimpan nomor tiket tersebut untuk mengecek perkembangan laporan melalui menu *04 — CEK STATUS*.\n\n🇮🇩 *YONIF TP 953/HARIMAU RAWA*`});}
+}
+start().catch(console.error);
